@@ -1,0 +1,8 @@
+__pycache__
+env
+.scratch_pad
+.deploy
+.idea
+*.env
+*.yaml
+storage/

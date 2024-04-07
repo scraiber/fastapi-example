@@ -1,0 +1,124 @@
+version: 2.1
+orbs:
+  slack: circleci/slack@4.12.5
+executors:
+  docker-publisher:
+    environment:
+      IMAGE_NAME: scraiber/fastapi-db-example
+    docker:
+      - image: cimg/base:2024.02
+jobs:
+  build:
+    executor: docker-publisher
+    resource_class: small
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Build Docker image
+          command: |
+            docker build -t $IMAGE_NAME:latest ./src
+      - run:
+          name: Install trivy
+          command: |
+            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s
+      - run:
+          name: Scan the local image with trivy
+          command: |
+            ./bin/trivy image --exit-code 0 --severity MEDIUM,HIGH --no-progress $IMAGE_NAME:latest
+            ./bin/trivy image --exit-code 1 --severity CRITICAL --no-progress $IMAGE_NAME:latest
+      - run:
+          name: Archive Docker image
+          command: docker save -o image.tar $IMAGE_NAME
+      - persist_to_workspace:
+          root: .
+          paths:
+            - ./image.tar
+  test:
+    machine:
+      image: ubuntu-2204:2024.01.1
+    environment:
+    steps:
+      - checkout
+      - run:
+          name: Spin up docker-compose
+          command: |
+            docker-compose up -d --build
+      - run:
+          name: Test FastAPI Example
+          command: |
+            sleep 10
+            docker-compose exec web pytest .
+  publish-latest:
+    executor: docker-publisher
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+      - setup_remote_docker
+      - run:
+          name: Load archived Docker image
+          command: docker load -i /tmp/workspace/image.tar
+      - run:
+          name: Publish Docker Image to Docker Hub
+          command: |
+            echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            docker push $IMAGE_NAME:latest
+  publish-tag:
+    executor: docker-publisher
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/workspace
+      - setup_remote_docker
+      - run:
+          name: Load archived Docker image
+          command: docker load -i /tmp/workspace/image.tar
+      - run:
+          name: Publish Docker Image to Docker Hub
+          command: |
+            echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            IMAGE_TAG=${CIRCLE_TAG/v/''}
+            docker tag $IMAGE_NAME:latest $IMAGE_NAME:$IMAGE_TAG
+            docker push $IMAGE_NAME:latest
+            docker push $IMAGE_NAME:$IMAGE_TAG
+workflows:
+  build-main:
+    jobs:
+      - build:
+          filters:
+            branches:
+              only: main
+      - test:
+          filters:
+            branches:
+              only: main
+      - publish-latest:
+          requires:
+            - build
+            - test
+          filters:
+            branches:
+              only: main
+  build-tags:
+    jobs:
+      - build:
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - test:
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - publish-tag:
+          requires:
+            - build
+            - test
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/

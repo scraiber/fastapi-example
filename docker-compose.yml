@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+
+  web:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    volumes:
+      - ./src:/usr/src
+    ports:
+      - 8004:8000
+    environment:
+      PRIMARY_DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/foo
+      REPLICA_DATABASE_URL: postgresql+asyncpg://postgres:postgres@db_replica:5432/foo
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_ACCESS_KEY_ID: minio_access_key
+      S3_SECRET_ACCESS_KEY_ID: minio_secret_key
+      S3_BUCKET_NAME: example-bucket
+      REDIS_URL: redis://redis_db:6379
+    depends_on:
+      - db_replica
+      - redis_db
+      - minio
+      - createbuckets
+
+  db:
+    image: bitnami/postgresql:16
+    expose:
+      - 5432
+    environment:
+      POSTGRESQL_USERNAME: postgres
+      POSTGRESQL_PASSWORD: postgres
+      POSTGRESQL_DATABASE: foo
+      POSTGRESQL_REPLICATION_MODE: master
+      POSTGRESQL_REPLICATION_USER: repl_user
+      POSTGRESQL_REPLICATION_PASSWORD: repl_password
+
+  db_replica:
+    image: bitnami/postgresql:16
+    expose:
+      - 5432
+    depends_on:
+      - db
+    environment:
+      POSTGRESQL_REPLICATION_MODE: slave
+      POSTGRESQL_REPLICATION_USER: repl_user
+      POSTGRESQL_REPLICATION_PASSWORD: repl_password
+      POSTGRESQL_MASTER_HOST: db
+      POSTGRESQL_USERNAME: postgres
+      POSTGRESQL_PASSWORD: postgres
+      POSTGRESQL_MASTER_PORT_NUMBER: 5432
+
+  redis_db:
+    image: redis:7.0
+    ports:
+      - '6379:6379'
+    volumes:
+      - 'redis_data:/bitnami/redis/data'
+
+  minio:
+    image: minio/minio:RELEASE.2023-01-31T02-24-19Z
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./storage/minio:/data
+    environment:
+      MINIO_ACCESS_KEY: minio_access_key
+      MINIO_SECRET_KEY: minio_secret_key
+    command: server --address 0.0.0.0:9000 /data
+
+  createbuckets:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio:9000 minio_access_key minio_secret_key;
+      /usr/bin/mc mb myminio/example-bucket;
+      /usr/bin/mc policy set public myminio/example-bucket;
+      exit 0;
+      "
+
+volumes:
+  redis_data:
+    driver: local
+
