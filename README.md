@@ -18,7 +18,7 @@ Spin up docker-compose
 $ docker-compose up -d --build
 ```
 
-Now under `localhost:8004/docs`, you can find the APIs.
+Now under `localhost:8080/docs`, you can find the APIs.
 
 ### Tests
 
