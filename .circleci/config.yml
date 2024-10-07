@@ -37,7 +37,6 @@ jobs:
   test:
     machine:
       image: ubuntu-2204:2024.01.1
-    environment:
     steps:
       - checkout
       - run:
