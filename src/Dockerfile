@@ -1,5 +1,5 @@
 # Stage 1: Build stage
-FROM python:3.12-alpine as builder
+FROM python:3.12-alpine AS builder
 
 # set working directory
 WORKDIR /usr/src

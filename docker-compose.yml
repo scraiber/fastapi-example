@@ -1,7 +1,4 @@
-version: '3.8'
-
 services:
-
   web:
     build:
       context: ./src
@@ -9,7 +6,7 @@ services:
     volumes:
       - ./src:/usr/src
     ports:
-      - 8004:8000
+      - 8080:80
     environment:
       PRIMARY_DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/foo
       REPLICA_DATABASE_URL: postgresql+asyncpg://postgres:postgres@db_replica:5432/foo
